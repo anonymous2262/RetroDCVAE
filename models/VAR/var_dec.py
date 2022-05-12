@@ -2,7 +2,6 @@
 Implementation of "Attention is All You Need"
 """
 
-from numpy.core.fromnumeric import var
 import torch
 import torch.nn as nn
 
@@ -377,18 +376,21 @@ class VariationalDecoder(DecoderBase):
 
         self.alignment_layer = alignment_layer
 
-        if 'cvae' in args.save_dir:
-            K = args.latent_K
-            self.latent_emb = nn.Embedding(K, args.embed_size)
-            self.prior = LatFFN(d_model, K, dropout=0)
-            self.recog = LatFFN(d_model*2, K, dropout=0)
-            # ++++++++++++++++ GRU
-            if 'gru' in args.save_dir:
-                self.prior = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
-                self.recog = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
-                self.gru = True
-            self.cvae = True
-            self.args = args
+        # if 'cvae' in args.save_dir:
+        #     K = args.latent_K
+        #     self.latent_emb = nn.Embedding(K, args.embed_size)
+        #     self.prior = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
+        #     self.recog = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
+        #     self.gru = True
+        #     self.cvae = True
+        #     self.args = args
+        K = args.latent_K
+        self.latent_emb = nn.Embedding(K, args.embed_size)
+        self.prior = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
+        self.recog = nn.GRU(d_model, hidden_size=K, num_layers=1, batch_first=True)
+        self.gru = True
+        self.cvae = True
+        self.args = args
         # ++++++++++++++++
 
     @classmethod
@@ -450,22 +452,16 @@ class VariationalDecoder(DecoderBase):
         kld_loss = 0
         ## for CVAE
         if hasattr(self, 'cvae') and (step is None or step==0):
-            if hasattr(self, 'gru'):
-                logits = self.prior(src_memory_bank, None)[-1][0] #  GRU
-            else:
-                logits = self.prior(src_memory_bank.mean(dim=1))
+            logits = self.prior(src_memory_bank, None)[-1][0] #  GRU
             prior = F.log_softmax(logits, dim=-1)
             if self.training:
-                if hasattr(self, 'gru'):
-                    logits = self.recog(torch.cat([src_memory_bank, output], dim=1), None)[-1][0] #  GRU
-                else:
-                    logits = self.recog(torch.cat([src_memory_bank.mean(dim=1), output.mean(dim=1)], dim=-1))
+                logits = self.recog(torch.cat([src_memory_bank, output], dim=1), None)[-1][0] #  GRU
                 recog = F.softmax(logits, dim=-1)
                 kld_loss = F.kl_div(prior, recog, reduction="sum")
             y_sample = gumbel_softmax(logits, hard=True)
-            if not self.training:  # for beam search during inference
+            beam_size = self.args.beam_size #30 # 
+            if not self.training and y_sample.shape[0]%beam_size==0:  # for beam search during inference   not for eval_iter
                 # import ipdb; ipdb.set_trace()
-                beam_size = 30 # self.args.beam_size
                 y_sample = torch.stack(y_sample.split(beam_size, dim=0), dim=1)[0]  # [b, h]
                 y_sample = tile(y_sample, count=beam_size, dim=0)
             latent = y_sample @ self.latent_emb.weight

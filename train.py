@@ -113,8 +113,8 @@ def main(args):
             batch_size=1,
             shuffle=True,
             collate_fn=lambda _batch: _batch[0],
-            num_workers=16, #16,
-            pin_memory=True #True
+            num_workers=16,
+            pin_memory=True
         )
 
         for batch_idx, batch in enumerate(train_loader):

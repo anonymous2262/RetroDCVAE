@@ -142,14 +142,10 @@ class Graph2SeqSeriesRel(nn.Module):
         dec_outs = dec_outs.permute(1, 2, 0)                                    # [t, b, v] => [b, v, t]
 
         #++++++++++++++++++++
-        if 'cvae' in self.args.save_dir or 'van' in self.args.save_dir:
-            loss = self.criterion(
-                input=dec_outs,
-                target=reaction_batch.tgt_token_ids
-            )
-        else:
-            #TODO: only the first token is diverse due to auto-regressive ---> fixed
-            loss = mycriterion(input=dec_outs, batch=reaction_batch, mask_id=self.vocab["_PAD"])
+        loss = self.criterion(
+            input=dec_outs,
+            target=reaction_batch.tgt_token_ids
+        )
         #++++++++++++++++++++
 
         predictions = torch.argmax(dec_outs, dim=1)                             # [b, t]
